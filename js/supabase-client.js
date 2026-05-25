@@ -5,8 +5,8 @@
    ========================================================================= */
 'use strict';
 
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';        // e.g. https://xxxxxxxx.supabase.co
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://fukzddfmkmugenlhrktx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_vC_ZRr6ZfuTvJ4yphoti4Q_dOiccKPt';
 
 window.SUPABASE_CONFIGURED =
   SUPABASE_URL && SUPABASE_ANON_KEY &&
