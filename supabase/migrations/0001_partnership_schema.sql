@@ -1,5 +1,5 @@
 -- =========================================================================
--- Petra Partnership Dashboard — initial schema for institutions, departments,
+-- Meridian Partnership Dashboard — initial schema for institutions, departments,
 -- and agreements. Designed for Supabase (Postgres 15+).
 --
 -- After applying:

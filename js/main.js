@@ -1,6 +1,6 @@
 /* =========================================================================
-   Petra Partnership Dashboard — MoU / MoA / IA portfolio for
-   Petra Christian University (Universitas Kristen Petra).
+   Partnership Dashboard — MoU / MoA / IA portfolio for
+   Meridian University (Demo instance).
    Vanilla JS SPA with localStorage persistence; data loaded from /data.
    ========================================================================= */
 'use strict';
@@ -710,7 +710,7 @@ const Store = {
 
   defaultUsers() {
     return [
-      { id: 'u1', name: 'Zefanya Kharisma Nugroho', email: 'zefanya.kharisma@gmail.com', role: 'Admin', department: null, avatar: '👩‍💼', active: true },
+      { id: 'u1', name: 'Admin User', email: 'admin@meridian.edu', role: 'Admin', department: null, avatar: '👩‍💼', active: true },
     ];
   },
 
@@ -1313,8 +1313,8 @@ function renderGuestLayout(content) {
             <i data-lucide="graduation-cap" class="w-5 h-5 text-white"></i>
           </div>
           <div>
-            <div class="font-bold text-slate-900 dark:text-white leading-tight text-sm">Petra Partnership Dashboard</div>
-            <div class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Universitas Kristen Petra · OIA</div>
+            <div class="font-bold text-slate-900 dark:text-white leading-tight text-sm">Meridian Partnership Dashboard</div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Meridian University · OIA</div>
           </div>
         </a>
         <nav class="hidden md:flex items-center gap-1">
@@ -1341,7 +1341,7 @@ function renderGuestLayout(content) {
     <main class="flex-1">${content}</main>
     <footer class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 mt-12">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div class="text-sm text-slate-500 dark:text-slate-400">© 2026 Universitas Kristen Petra · Office of International Affairs</div>
+        <div class="text-sm text-slate-500 dark:text-slate-400">© 2026 Meridian University · Office of International Affairs</div>
         <div class="text-xs text-slate-400 dark:text-slate-500">Built for transparency. Data refreshed in real-time.</div>
       </div>
     </footer>`;
@@ -1383,9 +1383,9 @@ function viewGuestDashboard() {
               <span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
               PUBLIC PORTFOLIO
             </div>
-            <h1 class="mt-3 text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">Petra Partnership Portfolio</h1>
+            <h1 class="mt-3 text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">Meridian Partnership Portfolio</h1>
             <p class="mt-2 text-slate-600 dark:text-slate-400 max-w-2xl">
-              An open record of Universitas Kristen Petra's collaborations — Memoranda of Understanding (MoU), Memoranda of Agreement (MoA), and Implementation Arrangements (IA) — with partner institutions across Indonesia and around the world.
+              An open record of Meridian University's collaborations — Memoranda of Understanding (MoU), Memoranda of Agreement (MoA), and Implementation Arrangements (IA) — with partner institutions across Indonesia and around the world.
             </p>
           </div>
           <div class="flex items-center gap-2">
@@ -1643,14 +1643,14 @@ function viewLogin() {
             <i data-lucide="graduation-cap" class="w-6 h-6 text-white"></i>
           </div>
           <div>
-            <div class="font-bold text-slate-900 dark:text-white">Petra Partnership Dashboard</div>
+            <div class="font-bold text-slate-900 dark:text-white">Meridian Partnership Dashboard</div>
             <div class="text-[10px] uppercase tracking-wider text-slate-500">Admin Console</div>
           </div>
         </a>
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-7">
           ${configWarning}
           <h1 id="login-title" class="text-xl font-bold text-slate-900 dark:text-white">Welcome back</h1>
-          <p id="login-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1">Sign in to manage Petra's partnership portfolio.</p>
+          <p id="login-subtitle" class="text-sm text-slate-500 dark:text-slate-400 mt-1">Sign in to manage Meridian's partnership portfolio.</p>
 
           <div class="mt-5 flex gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-800">
             ${tabBtn('password', 'Password')}
