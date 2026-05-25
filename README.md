@@ -15,9 +15,10 @@ A responsive web dashboard for managing Petra Christian University's (Universita
 | Coverage | 1,584 domestic · 705 international |
 | Scope tags | Learning · Research · Student Affairs · Community Service |
 | Institution types | Education · Industry · Organization · Government · Foundation |
-| Stack | Vanilla JS · Tailwind (CDN) · Chart.js · Lucide |
+| Stack | Vanilla JS · Tailwind (CDN) · Chart.js · Lucide · `@supabase/supabase-js` |
 | Auth | **Supabase Auth** (email + password, magic-link, sign-up) |
-| Storage | `localStorage` (client) · JSON files (source of truth) |
+| Storage | Supabase PostgreSQL (agreements · institutions · departments) · `localStorage` (auth state, logs, notifications) |
+| Realtime | Supabase Realtime subscription on `agreements` — live INSERT/UPDATE/DELETE |
 | Snapshot date | 2026-05-21 |
 
 ---
@@ -46,6 +47,7 @@ A responsive web dashboard for managing Petra Christian University's (Universita
 - **Lifecycle Statuses** — Active, Auto-renewed, Open-ended, Pending Approval, Renewal In Progress, Ended, Expired, Unknown (mapped from the source dataset)
 - **Auto-Archive** — when status reaches a terminal/signed state the record automatically appears in the Library
 - **Document upload** (simulated; production-ready hook point for Supabase Storage / S3)
+- **Realtime sync** — Supabase Realtime pushes `agreements` INSERT/UPDATE/DELETE events to all connected browsers without polling
 - **Archive Library** with advanced search
 - **Analytics & Reports** with multiple chart types
 - **User Management** (Admin only) — create, enable/disable, delete users
@@ -63,6 +65,9 @@ A responsive web dashboard for managing Petra Christian University's (Universita
 This is a static SPA, but it **must be served over HTTP** — `fetch()` is blocked on `file://`, so opening `index.html` directly will not work. The app will show a clear error screen if you try.
 
 ```bash
+# Install the Node.js Supabase client (one-time)
+npm install
+
 # From the project root, run any static server. Examples:
 
 # Python (built-in)
@@ -87,9 +92,30 @@ Auth is backed by **Supabase Auth**, so the dashboard needs a Supabase project b
    const SUPABASE_ANON_KEY = '<your-anon-public-key>';
    ```
 
-4. (Optional) In **Authentication → Providers**, enable **Email** with password and/or magic-link. If "Confirm email" is on, new sign-ups must verify before logging in.
+4. Apply the database migration in the Supabase SQL editor (or via the CLI):
+
+   ```bash
+   # Using the Supabase CLI
+   supabase db push
+   # or paste the contents of supabase/migrations/0001_partnership_schema.sql
+   # directly into your project's SQL editor.
+   ```
+
+5. Seed the database from the bundled JSON files:
+
+   ```bash
+   SUPABASE_URL=https://<ref>.supabase.co \
+   SUPABASE_SERVICE_KEY=<service-role-key> \
+   node scripts/import_to_supabase.mjs
+   ```
+
+   Use the **service role** key (not the anon key) so the import bypasses Row Level Security.
+
+6. (Optional) In **Authentication → Providers**, enable **Email** with password and/or magic-link. If "Confirm email" is on, new sign-ups must verify before logging in.
 
 If the keys are missing, the login screen surfaces a banner saying Supabase isn't configured. The rest of the app (guest dashboard, library, analytics) still works against the bundled `/data` JSON.
+
+> **Realtime**: `js/agreements-repo.js` subscribes to the `agreements` table via Supabase Realtime after sign-in. All INSERT/UPDATE/DELETE events are streamed to connected clients and trigger an automatic re-render of the current view.
 
 ### Admin Account
 
@@ -123,11 +149,13 @@ Add screenshots under `docs/screenshots/` and they will render here.
 ```
 Dashboard Partnership/
 ├── index.html              # SPA shell, CDN imports, Tailwind config
+├── package.json            # Node.js manifest — @supabase/supabase-js dependency
 ├── css/
 │   └── style.css           # Custom styles, animations, themed pills
 ├── js/
 │   ├── main.js             # Full SPA: router, store, auth, views, charts
-│   └── supabase-client.js  # Supabase URL + anon key bootstrap (window.supabaseClient)
+│   ├── supabase-client.js  # Supabase URL + anon key bootstrap (window.supabaseClient)
+│   └── agreements-repo.js  # Supabase CRUD + Realtime for agreements / institutions / departments
 ├── data/
 │   ├── partnerships_1.json        # Raw source database (input)
 │   ├── institutions.json          # Deduped institutions w/ institution_type tags (generated)
@@ -135,8 +163,12 @@ Dashboard Partnership/
 │   ├── agreements.json            # Normalized agreements w/ units, scope_tags, flags (generated)
 │   └── meta.json                  # Totals + status/type/kind/scope/institution_type breakdowns (generated)
 ├── scripts/
-│   └── convert_partnerships.py    # Source → normalized JSON converter
-└── README.md
+│   ├── convert_partnerships.py    # Source → normalized JSON converter
+│   ├── import_to_supabase.mjs     # Seeds institutions / departments / agreements into Supabase
+│   └── make-demo-data.mjs         # Generates a smaller demo dataset for development
+└── supabase/
+    └── migrations/
+        └── 0001_partnership_schema.sql  # DDL: tables, indexes, RLS, Realtime publication
 ```
 
 ### `main.js` modules (logical, single-file)
@@ -153,11 +185,23 @@ Dashboard Partnership/
 | `UI` | Atomic helpers — KPI card, card, pill, progress bar, empty state |
 | `Views` | Page renderers — Guest, Admin, Agreement, Library, Users, etc. |
 
+**`js/agreements-repo.js`** (separate file, loaded before `main.js`) exposes `window.AgreementsRepo`:
+
+| Export | Responsibility |
+|--------|----------------|
+| `loadAll()` | Parallel-fetches `institutions`, `departments`, `agreements` from Supabase and returns them in camelCase |
+| `insertAgreement(a)` | Inserts a new agreement row; returns the mapped object |
+| `updateAgreement(id, patch)` | Updates a row by ID; returns the updated object |
+| `deleteAgreement(id)` | Deletes a row by ID |
+| `subscribe({ onChange })` | Opens a Supabase Realtime channel on `agreements` — calls `onChange` with `{ type, agreement }` on INSERT/UPDATE/DELETE |
+| `unsubscribe()` | Tears down the Realtime channel |
+| `deriveStatus(stored, endDate)` | Client-side: flips `Active`/`Auto-renewed` to `Expired` when `end_date` has passed, avoiding a SQL cron |
+
 ---
 
 ## Data Pipeline
 
-The dashboard reads from four normalized JSON files in `/data`. These are derived from `partnerships_1.json` via a deterministic Python script.
+The dashboard reads from Supabase PostgreSQL (live) with `/data` JSON files as the source-of-truth seed. The full pipeline:
 
 ```
 partnerships_1.json   (international[] + domestic[])
@@ -166,15 +210,20 @@ partnerships_1.json   (international[] + domestic[])
         ▼
 institutions.json  +  departments.json  +  agreements.json  +  meta.json
         │
-        │   fetch() on app boot
+        │   node scripts/import_to_supabase.mjs   (one-time seed, service role key)
         ▼
-   Store.state  ──persist──▶  localStorage
+  Supabase PostgreSQL  ──Realtime──▶  AgreementsRepo  ──▶  Store.state
+        │
+        │   fetch() on app boot (AgreementsRepo.loadAll)
+        ▼
+   Store.state  ──persist──▶  localStorage  (auth state, logs, notifications)
 ```
 
-Re-run the converter whenever the source changes:
+Re-run the converter whenever the source changes, then re-seed:
 
 ```bash
 python3 scripts/convert_partnerships.py
+SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/import_to_supabase.mjs
 ```
 
 The script:
@@ -190,198 +239,145 @@ After regenerating, hard-refresh the browser **and** reset local data (Settings 
 
 ---
 
-## Database Schema (Production Reference)
+## Database Schema
 
-The in-memory `Store.state` mirrors a normalized relational schema. Below is the suggested **PostgreSQL / Supabase** layout.
+The live schema is in `supabase/migrations/0001_partnership_schema.sql` and is applied to the Supabase project. Key design decisions:
+
+- PKs are `text` (matching the string IDs in the source JSON), not UUID
+- `"Expired"` status is **not stored** — `deriveStatus()` in `agreements-repo.js` derives it client-side from `end_date`, so no cron is needed
+- Row Level Security is enabled: reads are public, writes require `authenticated` role
+- `agreements`, `institutions`, and `departments` are added to the `supabase_realtime` publication so changes stream to all connected browsers
+- `updated_at` is auto-bumped by the `agreements_touch` trigger on every UPDATE
 
 ### ERD
 
 ```
-            ┌───────────────┐
-            │ departments   │
-            │───────────────│
-            │ id  (PK)      │◄────┐
-            │ name          │     │
-            │ short         │     │
-            └───────────────┘     │
-                                  │
-┌───────────┐   ┌───────────────┐ │   ┌──────────────────┐
-│ users     │   │ institutions  │ │   │ uploaded_files   │
-│───────────│   │───────────────│ │   │──────────────────│
-│ id (PK)   │◄┐ │ id (PK)       │◄┤   │ id (PK)          │
-│ name      │ │ │ name          │ │   │ agreement_id (FK)│─┐
-│ email UQ  │ │ │ country       │ │   │ name, size, url  │ │
-│ password  │ │ │ type          │ │   │ uploaded_at      │ │
-│ role      │ │ └───────────────┘ │   └──────────────────┘ │
-│ dept (FK) │─┘                   │                        │
-│ active    │                     │                        │
-└───────────┘                     │   ┌──────────────────┐ │
-       ▲                          │   │ agreements       │◄┘
-       │                          │   │──────────────────│
-       │                          └──►│ id (PK)          │
-       │   ┌──────────────────────┐   │ code UQ          │
-       └───│ activity_logs        │◄──│ title            │
-           │──────────────────────│   │ type (MoU/MoA/IA)│
-           │ id (PK)              │   │ status           │
-           │ agreement_id (FK)    │──►│ progress         │
-           │ user_id (FK)         │   │ institution_id FK│
-           │ action               │   │ department_id FK │
-           │ message              │   │ pic_user_id FK   │
-           │ at                   │   │ start_date       │
-           └──────────────────────┘   │ end_date         │
-                                      │ signed_date      │
-           ┌──────────────────────┐   │ description      │
-           │ notifications        │   │ notes            │
-           │──────────────────────│   │ tags (jsonb)     │
-           │ id (PK)              │   │ created_at       │
-           │ user_id (FK)         │   │ updated_at       │
-           │ agreement_id (FK)    │   └──────────────────┘
-           │ type, title, message │            ▲
-           │ read, at             │            │
-           └──────────────────────┘   ┌──────────────────┐
-                                      │ archive_library  │
-                                      │──────────────────│
-                                      │ agreement_id (PK)│
-                                      │ archived_at      │
-                                      │ category         │
-                                      └──────────────────┘
+┌───────────────────┐         ┌──────────────────────────┐
+│ departments       │         │ institutions             │
+│───────────────────│         │──────────────────────────│
+│ id  (text PK)     │◄──┐  ┌─►│ id  (text PK)            │
+│ name              │   │  │  │ name                     │
+│ short             │   │  │  │ canonical_name           │
+│ is_faculty        │   │  │  │ type · kind              │
+│ created_at        │   │  │  │ country · city · address │
+└───────────────────┘   │  │  │ institution_types text[] │
+                        │  │  │ created_at               │
+                        │  │  └──────────────────────────┘
+                        │  │
+         ┌──────────────────────────────────────────┐
+         │ agreements                               │
+         │──────────────────────────────────────────│
+         │ id (text PK)                             │
+         │ code · source_no · kind                  │
+         │ title · type · status                    │
+         │ institution_id  (FK → institutions)      │─┘
+         │ department_id   (FK → departments)       │─┘
+         │ pic_user_id     (uuid, auth.users ref)   │
+         │ implementing_unit · units text[]         │
+         │ scope · scope_tags text[]                │
+         │ institution_type text[]                  │
+         │ start_date · end_date · renewal_date     │
+         │ end_date_kind · end_date_raw             │
+         │ renewal_info_raw · realization           │
+         │ degree_program jsonb                     │
+         │ non_degree_program jsonb                 │
+         │ description · notes                      │
+         │ tags text[] · new_partner                │
+         │ created_at · updated_at  (auto-touched)  │
+         └──────────────────────────────────────────┘
 ```
 
-### SQL DDL (PostgreSQL / Supabase)
+> `activity_logs`, `notifications`, `uploaded_files`, and `users` are managed in `localStorage` / Supabase Auth for now and are not in the Postgres schema. See **Production Migration Path** for extending the schema.
+
+### SQL DDL
+
+The full DDL is in `supabase/migrations/0001_partnership_schema.sql`. Abbreviated summary:
 
 ```sql
 -- departments
-CREATE TABLE departments (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        text NOT NULL,
-  short       text NOT NULL,
-  is_faculty  boolean DEFAULT false,
-  created_at  timestamptz DEFAULT now()
+create table public.departments (
+  id          text primary key,
+  short       text not null,
+  name        text not null,
+  is_faculty  boolean not null default false,
+  created_at  timestamptz not null default now()
 );
 
 -- institutions
-CREATE TABLE institutions (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name            text NOT NULL,
-  canonical_name  text,
-  country         text NOT NULL,
-  city            text,
-  address         text,
-  kind            text CHECK (kind IN ('Domestic','International')),
-  type            text NOT NULL CHECK (type IN ('University','Industry','Government','NGO')),
-  created_at      timestamptz DEFAULT now()
-);
-
--- users  (use Supabase Auth.users + a profile table in production)
-CREATE TABLE users (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email         text NOT NULL UNIQUE,
-  name          text NOT NULL,
-  password_hash text NOT NULL, -- if not using Supabase Auth
-  role          text NOT NULL CHECK (role IN ('Admin','Manager','Staff','Viewer')),
-  department_id uuid REFERENCES departments(id),
-  avatar        text,
-  active        boolean DEFAULT true,
-  created_at    timestamptz DEFAULT now()
+create table public.institutions (
+  id                 text primary key,
+  name               text not null,
+  canonical_name     text,
+  type               text,
+  kind               text,
+  country            text,
+  city               text,
+  address            text,
+  institution_types  text[] default '{}',
+  created_at         timestamptz not null default now()
 );
 
 -- agreements
-CREATE TYPE agreement_type   AS ENUM ('MoU','MoA','IA');
-CREATE TYPE agreement_status AS ENUM (
-  -- workflow stages
-  'Drafting','Internal Review','Legal Review','Partner Review',
-  'Waiting Signature','Signed','Completed','Archived',
-  -- lifecycle statuses (from the real partnership dataset)
-  'Active','Auto-renewed','Open-ended','Pending Approval',
-  'Renewal In Progress','Ended','Expired','Unknown'
+create table public.agreements (
+  id                   text primary key,
+  code                 text,
+  source_no            integer,
+  kind                 text,
+  title                text not null,
+  type                 text not null default 'MoU',
+  status               text not null default 'Drafting',
+  institution_id       text references public.institutions(id) on delete set null,
+  department_id        text references public.departments(id)  on delete set null,
+  pic_user_id          uuid,
+  implementing_unit    text,
+  units                text[] default '{}',
+  unit_department_ids  text[] default '{}',
+  scope                text,
+  scope_tags           text[] default '{}',
+  institution_type     text[] default '{}',
+  start_date           date,
+  end_date             date,
+  end_date_kind        text,
+  end_date_raw         text,
+  renewal_date         date,
+  renewal_info_raw     text,
+  realization          text,
+  degree_program       jsonb,
+  non_degree_program   jsonb,
+  description          text,
+  notes                text,
+  tags                 text[] default '{}',
+  new_partner          boolean not null default false,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
 );
 
-CREATE TABLE agreements (
-  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code            text NOT NULL UNIQUE,
-  title           text NOT NULL,
-  type            agreement_type NOT NULL,
-  status          agreement_status NOT NULL DEFAULT 'Drafting',
-  progress        int  NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
-  institution_id  uuid NOT NULL REFERENCES institutions(id),
-  department_id   uuid NOT NULL REFERENCES departments(id),
-  pic_user_id     uuid NOT NULL REFERENCES users(id),
-  start_date      date NOT NULL,
-  end_date        date,
-  signed_date     date,
-  description     text,
-  notes           text,
-  tags            jsonb DEFAULT '[]'::jsonb,
-  created_at      timestamptz DEFAULT now(),
-  updated_at      timestamptz DEFAULT now(),
-  CHECK (end_date IS NULL OR end_date > start_date)
-);
+-- Indexes
+create index agreements_status_idx        on public.agreements (status);
+create index agreements_end_date_idx      on public.agreements (end_date);
+create index agreements_institution_idx   on public.agreements (institution_id);
+create index agreements_department_idx    on public.agreements (department_id);
+create index agreements_type_idx          on public.agreements (type);
 
-CREATE INDEX idx_agreements_status      ON agreements(status);
-CREATE INDEX idx_agreements_end_date    ON agreements(end_date);
-CREATE INDEX idx_agreements_department  ON agreements(department_id);
-CREATE INDEX idx_agreements_institution ON agreements(institution_id);
+-- Auto-bump updated_at
+create trigger agreements_touch
+  before update on public.agreements
+  for each row execute function public.touch_updated_at();
 
--- uploaded_files
-CREATE TABLE uploaded_files (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  agreement_id   uuid NOT NULL REFERENCES agreements(id) ON DELETE CASCADE,
-  name           text NOT NULL,
-  storage_path   text NOT NULL,   -- supabase storage object path
-  mime_type      text,
-  size_bytes     bigint,
-  uploaded_by    uuid REFERENCES users(id),
-  uploaded_at    timestamptz DEFAULT now()
-);
+-- RLS: reads are public, writes require authenticated
+alter table public.institutions enable row level security;
+alter table public.departments  enable row level security;
+alter table public.agreements   enable row level security;
 
--- activity_logs (audit trail)
-CREATE TABLE activity_logs (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  agreement_id   uuid REFERENCES agreements(id) ON DELETE CASCADE,
-  user_id        uuid REFERENCES users(id),
-  action         text NOT NULL,    -- CREATED | UPDATED | STATUS_CHANGE | FILE_UPLOAD | DELETED
-  from_status    agreement_status,
-  to_status      agreement_status,
-  message        text,
-  at             timestamptz DEFAULT now()
-);
+create policy "read agreements"   on public.agreements  for select using (true);
+create policy "write agreements"  on public.agreements
+  for all to authenticated using (true) with check (true);
+-- (similar policies on institutions and departments)
 
--- notifications
-CREATE TABLE notifications (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id        uuid REFERENCES users(id),
-  agreement_id   uuid REFERENCES agreements(id) ON DELETE CASCADE,
-  type           text NOT NULL,    -- expiration | info | warning
-  title          text NOT NULL,
-  message        text,
-  read           boolean DEFAULT false,
-  at             timestamptz DEFAULT now()
-);
-
--- archive_library (auto-populated trigger below)
-CREATE TABLE archive_library (
-  agreement_id   uuid PRIMARY KEY REFERENCES agreements(id) ON DELETE CASCADE,
-  archived_at    timestamptz DEFAULT now(),
-  category       text
-);
-
--- Trigger: auto-archive on terminal/live status
-CREATE OR REPLACE FUNCTION auto_archive_agreement() RETURNS trigger AS $$
-BEGIN
-  IF NEW.status IN (
-    'Signed','Completed','Archived',
-    'Active','Auto-renewed','Open-ended','Ended','Expired'
-  ) THEN
-    INSERT INTO archive_library (agreement_id, category)
-    VALUES (NEW.id, NEW.type::text)
-    ON CONFLICT (agreement_id) DO NOTHING;
-  END IF;
-  RETURN NEW;
-END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_auto_archive
-AFTER INSERT OR UPDATE OF status ON agreements
-FOR EACH ROW EXECUTE FUNCTION auto_archive_agreement();
+-- Realtime: stream changes to subscribed browsers
+alter publication supabase_realtime add table public.agreements;
+alter publication supabase_realtime add table public.institutions;
+alter publication supabase_realtime add table public.departments;
 ```
 
 ---
@@ -415,20 +411,20 @@ FOR EACH ROW EXECUTE FUNCTION auto_archive_agreement();
 
 ## Production Migration Path
 
-To convert this prototype into a deployable enterprise stack:
+Core infrastructure (Supabase Auth, PostgreSQL, Realtime, RLS) is already wired. Remaining steps to reach a fully deployable enterprise stack:
 
-1. **Scaffold**: `npx create-next-app@latest petra-partnership --typescript --tailwind --app`
-2. **Install**: `@supabase/supabase-js`, `recharts`, `shadcn/ui`, `react-hook-form`, `zod`, `lucide-react`
-3. **Database**: Apply SQL DDL above on a Supabase project; enable Row Level Security per role.
-4. **Storage**: Create `agreement-files` bucket on Supabase Storage; wire `uploaded_files.storage_path`.
-5. **Auth**: Use Supabase Auth (email/password) → map `auth.users.id` to `users.id` profile table.
-6. **Seed**: Adapt `scripts/convert_partnerships.py` to write directly into Supabase via `psql` or the REST API.
-7. **API**: Replace `Store.*` calls in `main.js` with `fetch('/api/...')` against Next.js route handlers.
-8. **Charts**: Swap Chart.js (used here for CDN simplicity) with Recharts components.
-9. **Email**: Hook expiration trigger (cron / Supabase scheduled function) → SendGrid / Resend.
-10. **Deploy**: Vercel (frontend) + Supabase (DB + storage + auth + cron).
-
-The component layout, page structure, and routes in this prototype map 1:1 to the Next.js app router pages.
+1. ✅ **Database** — Schema applied (`supabase/migrations/0001_partnership_schema.sql`), RLS enabled, Realtime publication set up.
+2. ✅ **Auth** — Supabase Auth (email/password + magic-link) integrated via `js/supabase-client.js`.
+3. ✅ **Realtime** — `js/agreements-repo.js` subscribes to INSERT/UPDATE/DELETE on `agreements`.
+4. **User profiles** — Add a `profiles` table linked to `auth.users.id` to store role, department, and display name instead of the current localStorage user records.
+5. **File storage** — Create an `agreement-files` bucket on Supabase Storage; replace the simulated upload in `main.js` with `supabase.storage.from('agreement-files').upload(...)`.
+6. **Activity logs & notifications** — Migrate from localStorage to Supabase tables for multi-user persistence and cross-device consistency.
+7. **Email / expiration alerts** — Add a Supabase scheduled function (pg_cron or Edge Function) → SendGrid / Resend for upcoming-expiration notifications.
+8. **Next.js upgrade** (optional):
+   - `npx create-next-app@latest petra-partnership --typescript --tailwind --app`
+   - Install: `@supabase/supabase-js`, `recharts`, `shadcn/ui`, `react-hook-form`, `zod`, `lucide-react`
+   - Swap Chart.js (CDN) for Recharts components; replace `Store.*` calls with Supabase SDK calls.
+9. **Deploy** — Vercel (frontend) + Supabase (DB + storage + auth + cron).
 
 ---
 
@@ -442,20 +438,26 @@ The component layout, page structure, and routes in this prototype map 1:1 to th
 ### Workflow
 
 ```bash
-# 1. Start a dev server from the project root
+# 1. Install Node.js dependencies (one-time)
+npm install
+
+# 2. Start a dev server from the project root
 python3 -m http.server 8080
 
-# 2. (Optional) regenerate /data after editing the source dataset
+# 3. (Optional) regenerate /data after editing the source dataset
 python3 scripts/convert_partnerships.py
 
-# 3. After regenerating data, reset local state in the app
+# 4. Re-seed Supabase after regenerating data
+SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/import_to_supabase.mjs
+
+# 5. After re-seeding, reset local state in the app
 #    Settings → "Reset to demo data"   (or clear localStorage in DevTools)
 ```
 
 There is no build step. Tailwind runs from CDN, and `main.js` is loaded as a plain script — edits to `js/main.js` or `css/style.css` are picked up on refresh.
 
 ### Code conventions
-- **Single-file SPA** — keep new functionality in `js/main.js` under the appropriate module (`Store`, `Auth`, `Router`, `Views`, etc.). Don't introduce a bundler or split files unless migrating to the Next.js path.
+- **Single-file SPA + thin repo layer** — keep new functionality in `js/main.js` under the appropriate module. Supabase CRUD belongs in `js/agreements-repo.js` (`AgreementsRepo`). Don't introduce a bundler or split files further unless migrating to the Next.js path.
 - **No frameworks** — render via template strings + `innerHTML`, then re-bind events. Escape user-controlled strings with `escapeHtml()`.
 - **Tailwind utility classes only** — avoid adding to `css/style.css` unless an effect can't be expressed with utilities (animations, print styles, themed pills).
 - **Status handling** — when adding a status, update `WORKFLOW_STAGES` / `LIFECYCLE_STATUSES` / `ARCHIVE_STATUSES` consistently and check `stageProgress()` covers it.
@@ -476,7 +478,8 @@ There is no build step. Tailwind runs from CDN, and `main.js` is loaded as a pla
 | Login banner: "Supabase isn't configured" | `SUPABASE_URL` / `SUPABASE_ANON_KEY` blank | Fill them in `js/supabase-client.js` (see [Supabase Setup](#supabase-setup)) |
 | Sign-up succeeds but login fails | Supabase "Confirm email" is enabled | Verify the confirmation email, or disable confirmation in **Authentication → Providers** |
 | Signed-in user lands as Viewer | Email doesn't match a seeded local user | Sign in with the seeded Admin email, or add the user via **User Management** |
-| Stale data after `convert_partnerships.py` | `localStorage` snapshot is older | Settings → Reset, or `localStorage.clear()` |
+| Stale data after `convert_partnerships.py` | `localStorage` snapshot is older | Re-run `import_to_supabase.mjs`, then Settings → Reset |
+| Realtime events not arriving | Channel not subscribed / RLS blocking | Confirm `supabase_realtime` publication includes the table; check browser network tab for WebSocket |
 | `QuotaExceeded` on save | Browser localStorage limit (~5 MB) | Use Settings → Export, then reset; or switch to a backend |
 | Charts blank in dark mode | Chart instance cached with old theme | Toggle theme once, or refresh |
 
