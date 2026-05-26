@@ -1,8 +1,12 @@
 # Petra Partnership Dashboard
 
-A responsive web dashboard for managing Petra Christian University's (Universitas Kristen Petra) partnership portfolio — **MoU**, **MoA**, and **IA** agreements across domestic and international institutions. Built as a single-page application using **vanilla JavaScript + Tailwind CSS + Chart.js + Lucide Icons**, with `localStorage` persistence over a real institutional dataset served from `/data`.
+[![GitHub](https://img.shields.io/badge/GitHub-zefanyakharisma--cell%2FDashboard--Partnership-181717?logo=github)](https://github.com/zefanyakharisma-cell/Dashboard-Partnership)
 
-> The architecture documented below also describes how to lift this directly into a **Next.js + Supabase/PostgreSQL** stack for production deployment.
+A responsive web dashboard for managing **Petra Christian University's** (Universitas Kristen Petra) partnership portfolio — **MoU**, **MoA**, and **IA** agreements across domestic and international institutions.
+
+Built as a single-page application using **Vanilla JavaScript · Tailwind CSS · Chart.js · Lucide Icons**, backed by **Supabase** (PostgreSQL, Auth, Realtime), with `localStorage` for auth state and notifications.
+
+> The architecture described here also serves as a blueprint for lifting the app into a **Next.js + Supabase/PostgreSQL** production stack.
 
 ---
 
@@ -15,7 +19,7 @@ A responsive web dashboard for managing Petra Christian University's (Universita
 | Coverage | 1,584 domestic · 705 international |
 | Scope tags | Learning · Research · Student Affairs · Community Service |
 | Institution types | Education · Industry · Organization · Government · Foundation |
-| Stack | Vanilla JS · Tailwind (CDN) · Chart.js · Lucide · `@supabase/supabase-js` |
+| Stack | Vanilla JS · Tailwind (CDN) · Chart.js · Lucide · `@supabase/supabase-js` v2 |
 | Auth | **Supabase Auth** (email + password, magic-link, sign-up) |
 | Storage | Supabase PostgreSQL (agreements · institutions · departments) · `localStorage` (auth state, logs, notifications) |
 | Realtime | Supabase Realtime subscription on `agreements` — live INSERT/UPDATE/DELETE |
@@ -62,7 +66,7 @@ A responsive web dashboard for managing Petra Christian University's (Universita
 
 ## Run Locally
 
-This is a static SPA, but it **must be served over HTTP** — `fetch()` is blocked on `file://`, so opening `index.html` directly will not work. The app will show a clear error screen if you try.
+This is a static SPA that **must be served over HTTP** — `fetch()` is blocked on `file://`, so opening `index.html` directly will not work. The app displays a clear error screen if you try.
 
 ```bash
 # Install the Node.js Supabase client (one-time)
@@ -81,7 +85,7 @@ npx serve -l 8080 .
 
 ### Supabase Setup
 
-Auth is backed by **Supabase Auth**, so the dashboard needs a Supabase project before sign-in works.
+Sign-in requires a Supabase project. The guest dashboard, Library, and Analytics pages work without it (they fall back to the bundled `/data` JSON).
 
 1. Create a project at [supabase.com](https://supabase.com) → **Project Settings → API**.
 2. Copy the **Project URL** and **anon public key**.
@@ -113,25 +117,27 @@ Auth is backed by **Supabase Auth**, so the dashboard needs a Supabase project b
 
 6. (Optional) In **Authentication → Providers**, enable **Email** with password and/or magic-link. If "Confirm email" is on, new sign-ups must verify before logging in.
 
-If the keys are missing, the login screen surfaces a banner saying Supabase isn't configured. The rest of the app (guest dashboard, library, analytics) still works against the bundled `/data` JSON.
+If the keys are missing, the login screen shows a "Supabase isn't configured" banner. All guest-facing pages (dashboard, library, analytics) continue to work against the bundled `/data` JSON.
 
 > **Realtime**: `js/agreements-repo.js` subscribes to the `agreements` table via Supabase Realtime after sign-in. All INSERT/UPDATE/DELETE events are streamed to connected clients and trigger an automatic re-render of the current view.
 
 ### Admin Account
 
-| Role  | Email                       |
-|-------|-----------------------------|
-| Admin | zefanya.kharisma@gmail.com  |
+| Role  | Email                      |
+|-------|----------------------------|
+| Admin | zefanya.kharisma@gmail.com |
 
-Sign-in is handled by Supabase Auth — create the account in your Supabase project (or sign up via the login page) using the email above so the local Admin role is matched on login. Any Supabase user whose email doesn't match a seeded record is dropped to a **Viewer** role. Additional users can be added in **User Management** once signed in.
+Create this account in your Supabase project (or sign up from the login page) — the app matches Supabase Auth sessions to local user records by email and assigns the `Admin` role. Any signed-in user whose email doesn't match a seeded record defaults to **Viewer**. Additional users can be added via **User Management** once signed in.
 
-State persists in `localStorage` (key `unicollab_state_v2`). To wipe local edits and reload from `/data`: **Settings → Reset to demo data**, or in DevTools console: `localStorage.removeItem('unicollab_state_v2')` then refresh.
+App state persists in `localStorage` (key `unicollab_state_v2`). To reset local edits and reload from `/data`: go to **Settings → Reset to demo data**, or run `localStorage.removeItem('unicollab_state_v2')` in DevTools and refresh.
 
 ---
 
 ## Screenshots
 
-Add screenshots under `docs/screenshots/` and they will render here.
+> **Live demo:** _deploy to Vercel (or any static host) and add the URL here._
+
+Add screenshots under `docs/screenshots/` and reference them below.
 
 | | |
 |---|---|
@@ -139,8 +145,6 @@ Add screenshots under `docs/screenshots/` and they will render here.
 | **Guest landing** — KPIs, status mix, country map | **Agreement list** — filter / search / sort / paginate |
 | ![Agreement detail](docs/screenshots/agreement-detail.png) | ![Analytics](docs/screenshots/analytics.png) |
 | **Agreement detail** — workflow, files, activity log | **Analytics** — trend, expirations, breakdowns |
-
-> Live demo: _add a hosted URL here once deployed (e.g. Vercel)._
 
 ---
 
@@ -158,6 +162,7 @@ Dashboard Partnership/
 │   └── agreements-repo.js  # Supabase CRUD + Realtime for agreements / institutions / departments
 ├── data/
 │   ├── partnerships_1.json        # Raw source database (input)
+│   ├── partnerships.source.json   # Original source snapshot (archive copy)
 │   ├── institutions.json          # Deduped institutions w/ institution_type tags (generated)
 │   ├── departments.json           # Departments / faculties / units (generated)
 │   ├── agreements.json            # Normalized agreements w/ units, scope_tags, flags (generated)
@@ -431,7 +436,8 @@ Core infrastructure (Supabase Auth, PostgreSQL, Realtime, RLS) is already wired.
 ## Development & Contributing
 
 ### Prerequisites
-- A modern browser (Chrome, Firefox, Edge, Safari)
+- Modern browser (Chrome, Firefox, Edge, Safari)
+- **Node.js 18+** — for `import_to_supabase.mjs` and `make-demo-data.mjs`
 - **Python 3.9+** — only if you want to regenerate the normalized JSON from `partnerships_1.json`
 - Any static file server (Python, Node, `caddy file-server`, `live-server`, etc.)
 
@@ -454,7 +460,7 @@ SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/import_to_supabase.mjs
 #    Settings → "Reset to demo data"   (or clear localStorage in DevTools)
 ```
 
-There is no build step. Tailwind runs from CDN, and `main.js` is loaded as a plain script — edits to `js/main.js` or `css/style.css` are picked up on refresh.
+There is no build step. Tailwind is loaded from CDN and `main.js` is a plain script — edits to `js/main.js` or `css/style.css` are reflected immediately on refresh.
 
 ### Code conventions
 - **Single-file SPA + thin repo layer** — keep new functionality in `js/main.js` under the appropriate module. Supabase CRUD belongs in `js/agreements-repo.js` (`AgreementsRepo`). Don't introduce a bundler or split files further unless migrating to the Next.js path.
@@ -556,4 +562,9 @@ Breakdown by scope (an agreement can carry multiple tags):
 ---
 
 ## License
+
 MIT — Use freely for educational and institutional purposes.
+
+---
+
+_Dataset snapshot: 2026-05-21 · Repo: [github.com/zefanyakharisma-cell/Dashboard-Partnership](https://github.com/zefanyakharisma-cell/Dashboard-Partnership)_
