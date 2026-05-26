@@ -1,8 +1,6 @@
-# Petra Partnership Dashboard
+# Partnership Dashboard
 
-[![GitHub](https://img.shields.io/badge/GitHub-zefanyakharisma--cell%2FDashboard--Partnership-181717?logo=github)](https://github.com/zefanyakharisma-cell/Dashboard-Partnership)
-
-A responsive web dashboard for managing **Petra Christian University's** (Universitas Kristen Petra) partnership portfolio — **MoU**, **MoA**, and **IA** agreements across domestic and international institutions.
+A responsive web dashboard for managing a university or organization's partnership portfolio — **MoU**, **MoA**, and **IA** agreements across domestic and international institutions.
 
 Built as a single-page application using **Vanilla JavaScript · Tailwind CSS · Chart.js · Lucide Icons**, backed by **Supabase** (PostgreSQL, Auth, Realtime), with `localStorage` for auth state and notifications.
 
@@ -125,9 +123,9 @@ If the keys are missing, the login screen shows a "Supabase isn't configured" ba
 
 | Role  | Email                      |
 |-------|----------------------------|
-| Admin | zefanya.kharisma@gmail.com |
+| Admin | admin@demo.local |
 
-Create this account in your Supabase project (or sign up from the login page) — the app matches Supabase Auth sessions to local user records by email and assigns the `Admin` role. Any signed-in user whose email doesn't match a seeded record defaults to **Viewer**. Additional users can be added via **User Management** once signed in.
+Create this account (or any account via sign-up from the login page) in your Supabase project — the app matches Supabase Auth sessions to local user records by email and assigns the `Admin` role to the seeded account. Any signed-in user whose email doesn't match a seeded record defaults to **Viewer**. Additional users can be added via **User Management** once signed in.
 
 App state persists in `localStorage` (key `unicollab_state_v2`). To reset local edits and reload from `/data`: go to **Settings → Reset to demo data**, or run `localStorage.removeItem('unicollab_state_v2')` in DevTools and refresh.
 
@@ -493,7 +491,7 @@ There is no build step. Tailwind is loaded from CDN and `main.js` is a plain scr
 
 ## Sample Data
 
-The bundled dataset is Petra Christian University's real partnership portfolio (snapshot 2026-05-21):
+The bundled demo dataset includes:
 
 - **38 departments / faculties / units** (Engineering, Business, Communication, Informatics, Civil & Planning, etc.)
 - **1,201 institutions** across domestic and international partners
